@@ -1,4 +1,5 @@
-module github.com/maisarasherif/Go-Microservices
+module github.com/maisarasherif/order-processing-microservices
+
 
 go 1.25.1
 
