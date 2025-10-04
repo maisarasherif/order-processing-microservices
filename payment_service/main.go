@@ -44,11 +44,6 @@ func main() {
 	sm.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		// Check database connection
-		if err := repo.Close(); err == nil {
-			// Reconnect after close check (health check shouldn't close connection)
-			repo, _ = repository.NewPostgresRepository(cfg.GetDatabaseConnectionString())
-		}
 		w.Write([]byte(`{"status":"healthy","service":"payment-service","database":"connected"}`))
 	}).Methods(http.MethodGet)
 

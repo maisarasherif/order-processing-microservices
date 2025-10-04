@@ -5,32 +5,37 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/maisarasherif/order-processing-microservices/payment_service/data"
 )
 
+// PostgresRepository implements PaymentRepository for PostgreSQL
 type PostgresRepository struct {
 	db *sql.DB
 }
 
+// NewPostgresRepository creates a new PostgreSQL repository
 func NewPostgresRepository(connectionString string) (*PostgresRepository, error) {
-
+	// Open database connection
 	db, err := sql.Open("postgres", connectionString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
+	// Test the connection
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(5 * time.Minute)
+	// Configure connection pool
+	db.SetMaxOpenConns(25)                 // Maximum open connections
+	db.SetMaxIdleConns(5)                  // Maximum idle connections
+	db.SetConnMaxLifetime(5 * time.Minute) // Connection lifetime
 
 	return &PostgresRepository{db: db}, nil
 }
 
+// Create inserts a new payment into the database
 func (r *PostgresRepository) Create(payment *data.Payment) error {
 	query := `
 		INSERT INTO payments (
@@ -58,6 +63,7 @@ func (r *PostgresRepository) Create(payment *data.Payment) error {
 	)
 
 	if err != nil {
+		// Check for duplicate idempotency key
 		if isDuplicateKeyError(err) {
 			return data.ErrDuplicateIdempotencyKey
 		}
@@ -67,6 +73,7 @@ func (r *PostgresRepository) Create(payment *data.Payment) error {
 	return nil
 }
 
+// GetByID retrieves a payment by its ID
 func (r *PostgresRepository) GetByID(id string) (*data.Payment, error) {
 	query := `
 		SELECT id, order_id, amount, currency, status, method,
@@ -77,6 +84,11 @@ func (r *PostgresRepository) GetByID(id string) (*data.Payment, error) {
 	`
 
 	payment := &data.Payment{}
+
+	// Use sql.NullString for nullable fields
+	var transactionID, errorMessage sql.NullString
+	var processedAt, failedAt sql.NullTime
+
 	err := r.db.QueryRow(query, id).Scan(
 		&payment.ID,
 		&payment.OrderID,
@@ -86,11 +98,11 @@ func (r *PostgresRepository) GetByID(id string) (*data.Payment, error) {
 		&payment.Method,
 		&payment.CustomerID,
 		&payment.IdempotencyKey,
-		&payment.TransactionID,
-		&payment.ErrorMessage,
+		&transactionID,
+		&errorMessage,
 		&payment.CreatedAt,
-		&payment.ProcessedAt,
-		&payment.FailedAt,
+		&processedAt,
+		&failedAt,
 	)
 
 	if err == sql.ErrNoRows {
@@ -100,9 +112,24 @@ func (r *PostgresRepository) GetByID(id string) (*data.Payment, error) {
 		return nil, fmt.Errorf("failed to get payment: %w", err)
 	}
 
+	// Convert sql.Null types to Go types
+	if transactionID.Valid {
+		payment.TransactionID = transactionID.String
+	}
+	if errorMessage.Valid {
+		payment.ErrorMessage = errorMessage.String
+	}
+	if processedAt.Valid {
+		payment.ProcessedAt = &processedAt.Time
+	}
+	if failedAt.Valid {
+		payment.FailedAt = &failedAt.Time
+	}
+
 	return payment, nil
 }
 
+// GetAll retrieves all payments
 func (r *PostgresRepository) GetAll() ([]*data.Payment, error) {
 	query := `
 		SELECT id, order_id, amount, currency, status, method,
@@ -121,6 +148,7 @@ func (r *PostgresRepository) GetAll() ([]*data.Payment, error) {
 	return r.scanPayments(rows)
 }
 
+// GetByOrderID retrieves all payments for a specific order
 func (r *PostgresRepository) GetByOrderID(orderID string) ([]*data.Payment, error) {
 	query := `
 		SELECT id, order_id, amount, currency, status, method,
@@ -140,6 +168,7 @@ func (r *PostgresRepository) GetByOrderID(orderID string) ([]*data.Payment, erro
 	return r.scanPayments(rows)
 }
 
+// GetByCustomerID retrieves all payments for a specific customer
 func (r *PostgresRepository) GetByCustomerID(customerID string) ([]*data.Payment, error) {
 	query := `
 		SELECT id, order_id, amount, currency, status, method,
@@ -159,6 +188,7 @@ func (r *PostgresRepository) GetByCustomerID(customerID string) ([]*data.Payment
 	return r.scanPayments(rows)
 }
 
+// GetByIdempotencyKey retrieves a payment by idempotency key
 func (r *PostgresRepository) GetByIdempotencyKey(key string) (*data.Payment, error) {
 	query := `
 		SELECT id, order_id, amount, currency, status, method,
@@ -169,6 +199,11 @@ func (r *PostgresRepository) GetByIdempotencyKey(key string) (*data.Payment, err
 	`
 
 	payment := &data.Payment{}
+
+	// Use sql.NullString for nullable fields
+	var transactionID, errorMessage sql.NullString
+	var processedAt, failedAt sql.NullTime
+
 	err := r.db.QueryRow(query, key).Scan(
 		&payment.ID,
 		&payment.OrderID,
@@ -178,11 +213,11 @@ func (r *PostgresRepository) GetByIdempotencyKey(key string) (*data.Payment, err
 		&payment.Method,
 		&payment.CustomerID,
 		&payment.IdempotencyKey,
-		&payment.TransactionID,
-		&payment.ErrorMessage,
+		&transactionID,
+		&errorMessage,
 		&payment.CreatedAt,
-		&payment.ProcessedAt,
-		&payment.FailedAt,
+		&processedAt,
+		&failedAt,
 	)
 
 	if err == sql.ErrNoRows {
@@ -192,9 +227,24 @@ func (r *PostgresRepository) GetByIdempotencyKey(key string) (*data.Payment, err
 		return nil, fmt.Errorf("failed to get payment by idempotency key: %w", err)
 	}
 
+	// Convert sql.Null types to Go types
+	if transactionID.Valid {
+		payment.TransactionID = transactionID.String
+	}
+	if errorMessage.Valid {
+		payment.ErrorMessage = errorMessage.String
+	}
+	if processedAt.Valid {
+		payment.ProcessedAt = &processedAt.Time
+	}
+	if failedAt.Valid {
+		payment.FailedAt = &failedAt.Time
+	}
+
 	return payment, nil
 }
 
+// UpdateStatus updates payment status and related fields
 func (r *PostgresRepository) UpdateStatus(payment *data.Payment) error {
 	query := `
 		UPDATE payments
@@ -220,6 +270,7 @@ func (r *PostgresRepository) UpdateStatus(payment *data.Payment) error {
 		return fmt.Errorf("failed to update payment status: %w", err)
 	}
 
+	// Check if any row was actually updated
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("failed to get rows affected: %w", err)
@@ -232,6 +283,7 @@ func (r *PostgresRepository) UpdateStatus(payment *data.Payment) error {
 	return nil
 }
 
+// GetStatistics retrieves payment statistics
 func (r *PostgresRepository) GetStatistics() (*PaymentStats, error) {
 	query := `
 		SELECT 
@@ -263,15 +315,22 @@ func (r *PostgresRepository) GetStatistics() (*PaymentStats, error) {
 	return stats, nil
 }
 
+// Close closes the database connection
 func (r *PostgresRepository) Close() error {
 	return r.db.Close()
 }
 
+// scanPayments is a helper function to scan multiple payment rows
 func (r *PostgresRepository) scanPayments(rows *sql.Rows) ([]*data.Payment, error) {
 	var payments []*data.Payment
 
 	for rows.Next() {
 		payment := &data.Payment{}
+
+		// Use sql.NullString for nullable fields
+		var transactionID, errorMessage sql.NullString
+		var processedAt, failedAt sql.NullTime
+
 		err := rows.Scan(
 			&payment.ID,
 			&payment.OrderID,
@@ -281,15 +340,30 @@ func (r *PostgresRepository) scanPayments(rows *sql.Rows) ([]*data.Payment, erro
 			&payment.Method,
 			&payment.CustomerID,
 			&payment.IdempotencyKey,
-			&payment.TransactionID,
-			&payment.ErrorMessage,
+			&transactionID,
+			&errorMessage,
 			&payment.CreatedAt,
-			&payment.ProcessedAt,
-			&payment.FailedAt,
+			&processedAt,
+			&failedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan payment: %w", err)
 		}
+
+		// Convert sql.Null types to Go types
+		if transactionID.Valid {
+			payment.TransactionID = transactionID.String
+		}
+		if errorMessage.Valid {
+			payment.ErrorMessage = errorMessage.String
+		}
+		if processedAt.Valid {
+			payment.ProcessedAt = &processedAt.Time
+		}
+		if failedAt.Valid {
+			payment.FailedAt = &failedAt.Time
+		}
+
 		payments = append(payments, payment)
 	}
 
@@ -300,8 +374,9 @@ func (r *PostgresRepository) scanPayments(rows *sql.Rows) ([]*data.Payment, erro
 	return payments, nil
 }
 
+// isDuplicateKeyError checks if error is a duplicate key violation
 func isDuplicateKeyError(err error) bool {
-
+	// PostgreSQL error code 23505 is unique_violation
 	return err != nil && (err.Error() == "pq: duplicate key value violates unique constraint \"payments_idempotency_key_key\"" ||
 		err.Error() == "pq: duplicate key value violates unique constraint \"payments_pkey\"")
 }
