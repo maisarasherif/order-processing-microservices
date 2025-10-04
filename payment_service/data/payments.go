@@ -240,3 +240,32 @@ func GetPaymentByIdempotencyKey(key string) (*Payment, error) {
 	}
 	return nil, ErrPaymentNotFound
 }
+
+// GeneratePaymentID is exported for handlers
+func GeneratePaymentID() string {
+	mu.Lock()
+	defer mu.Unlock()
+	return generateID()
+}
+
+// Now returns current UTC time
+func Now() time.Time {
+	return time.Now().UTC()
+}
+
+// ProcessPaymentGateway processes payment and returns updated payment
+func ProcessPaymentGateway(payment *Payment) Payment {
+	payment.Status = PaymentStatusProcessing
+	success := simulatePaymentGateway(payment)
+	now := Now()
+	if success {
+		payment.Status = PaymentStatusCompleted
+		payment.ProcessedAt = &now
+		payment.TransactionID = fmt.Sprintf("txn_%d", time.Now().Unix())
+	} else {
+		payment.Status = PaymentStatusFailed
+		payment.FailedAt = &now
+		payment.ErrorMessage = "Payment declined by gateway"
+	}
+	return *payment
+}
