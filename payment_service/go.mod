@@ -1,4 +1,4 @@
-module github.com/maisarasherif/order-processing-microservices
+module github.com/maisarasherif/order-processing-microservices/payment_service
 
 go 1.25.1
 
@@ -6,6 +6,8 @@ require (
 	github.com/go-playground/validator/v10 v10.27.0
 	github.com/gorilla/mux v1.8.1
 )
+
+require github.com/google/uuid v1.6.0
 
 require (
 	github.com/gabriel-vasile/mimetype v1.4.8 // indirect

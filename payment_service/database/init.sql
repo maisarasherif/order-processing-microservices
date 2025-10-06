@@ -3,6 +3,7 @@
 
 -- Enable UUID extension (useful for generating unique IDs)
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- Main payments table
 CREATE TABLE IF NOT EXISTS payments (
@@ -118,9 +119,9 @@ INSERT INTO payments (
     id, order_id, amount, currency, status, method, 
     customer_id, idempotency_key, transaction_id
 ) VALUES 
-    ('pay_test_1', 'order_test_1', 99.99, 'USD', 'completed', 'credit_card', 
+    ('pay_' || gen_random_uuid()::text, 'order_test_1', 99.99, 'USD', 'completed', 'credit_card', 
      'cust_test_1', 'test_key_1', 'txn_test_1'),
-    ('pay_test_2', 'order_test_2', 49.50, 'EUR', 'completed', 'paypal', 
+    ('pay_' || gen_random_uuid()::text, 'order_test_2', 49.50, 'EUR', 'completed', 'paypal', 
      'cust_test_2', 'test_key_2', 'txn_test_2')
 ON CONFLICT (idempotency_key) DO NOTHING;
 
