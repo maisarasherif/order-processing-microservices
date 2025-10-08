@@ -114,17 +114,6 @@ GROUP BY currency;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO paymentuser;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO paymentuser;
 
--- Insert some test data (optional - remove in production)
-INSERT INTO payments (
-    id, order_id, amount, currency, status, method, 
-    customer_id, idempotency_key, transaction_id
-) VALUES 
-    ('pay_' || gen_random_uuid()::text, 'order_test_1', 99.99, 'USD', 'completed', 'credit_card', 
-     'cust_test_1', 'test_key_1', 'txn_test_1'),
-    ('pay_' || gen_random_uuid()::text, 'order_test_2', 49.50, 'EUR', 'completed', 'paypal', 
-     'cust_test_2', 'test_key_2', 'txn_test_2')
-ON CONFLICT (idempotency_key) DO NOTHING;
-
 -- Create indexes on JSONB fields if using metadata
 CREATE INDEX IF NOT EXISTS idx_audit_metadata ON payment_audit_log USING GIN (metadata);
 

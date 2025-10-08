@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  # NGINX (API Gateway)
+  gateway:
+    image: nginx:stable-alpine
+    container_name: nginx_gateway
+    ports:
+      - "8080:80"       
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - microservices-network
+networks:
+  microservices-network:
+    external: true
