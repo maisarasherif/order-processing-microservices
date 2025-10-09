@@ -22,7 +22,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - microservices-network
+      - payment-network
 
   # Payment Service (GO)
   payment_service:
@@ -46,6 +46,7 @@ services:
       postgres:
         condition: service_healthy
     networks:
+      - payment-network
       - microservices-network
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8082/health"]
@@ -59,5 +60,7 @@ volumes:
     driver: local
 
 networks:
+  payment-network:
+    driver: bridge
   microservices-network:
     external: true
