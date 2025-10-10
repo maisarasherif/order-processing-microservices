@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Food Order System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .cart-summary {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .cart-summary h2 {
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+
+        .cart-items {
+            margin-bottom: 15px;
+        }
+
+        .cart-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            background: #f8f9fa;
+            margin-bottom: 8px;
+            border-radius: 8px;
+        }
+
+        .cart-total {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+            text-align: right;
+            padding: 15px 0;
+            border-top: 2px solid #eee;
+        }
+
+        .products-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+
+        .product-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .product-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+
+        .product-image {
+            font-size: 80px;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .product-name {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .product-price {
+            font-size: 1.3em;
+            color: #667eea;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        .quantity-control {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .quantity-btn {
+            width: 40px;
+            height: 40px;
+            border: none;
+            background: #667eea;
+            color: white;
+            font-size: 20px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .quantity-btn:hover {
+            background: #5568d3;
+        }
+
+        .quantity-display {
+            font-size: 1.5em;
+            font-weight: bold;
+            min-width: 40px;
+            text-align: center;
+        }
+
+        .add-to-cart-btn {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .add-to-cart-btn:hover {
+            background: #5568d3;
+        }
+
+        .checkout-section {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .place-order-btn {
+            width: 100%;
+            padding: 15px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.3em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .place-order-btn:hover {
+            background: #218838;
+        }
+
+        .place-order-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 20px 30px;
+            border-radius: 10px;
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            animation: slideIn 0.3s;
+            z-index: 1000;
+        }
+
+        .notification.success {
+            background: #28a745;
+        }
+
+        .notification.error {
+            background: #dc3545;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .order-history {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .order-item {
+            border-bottom: 1px solid #eee;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+
+        .order-status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .status-paid {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .clear-cart-btn {
+            padding: 10px 20px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🍔 Fast Food Order System</h1>
+            <p class="subtitle">Order your favorite meals with instant payment</p>
+        </header>
+
+        <!-- Cart Summary -->
+        <div class="cart-summary">
+            <h2>🛒 Shopping Cart</h2>
+            <div class="cart-items" id="cartItems">
+                <p style="text-align: center; color: #999;">Cart is empty</p>
+            </div>
+            <div class="cart-total">Total: $<span id="cartTotal">0.00</span></div>
+            <button class="clear-cart-btn" onclick="clearCart()">Clear Cart</button>
+        </div>
+
+        <!-- Products -->
+        <div class="products-grid" id="productsGrid"></div>
+
+        <!-- Checkout Form -->
+        <div class="checkout-section">
+            <h2 style="margin-bottom: 20px; color: #667eea;">📝 Checkout</h2>
+            <form id="checkoutForm">
+                <div class="form-group">
+                    <label for="customerEmail">Email *</label>
+                    <input type="email" id="customerEmail" required value="customer@example.com">
+                </div>
+
+                <div class="form-group">
+                    <label for="customerId">Customer ID *</label>
+                    <input type="text" id="customerId" required value="cust_001">
+                </div>
+
+                <div class="form-group">
+                    <label for="paymentMethod">Payment Method *</label>
+                    <select id="paymentMethod" required>
+                        <option value="credit_card">Credit Card</option>
+                        <option value="debit_card">Debit Card</option>
+                        <option value="paypal">PayPal</option>
+                        <option value="bank_transfer">Bank Transfer</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="currency">Currency *</label>
+                    <select id="currency" required>
+                        <option value="USD">USD - US Dollar</option>
+                        <option value="EUR">EUR - Euro</option>
+                        <option value="GBP">GBP - British Pound</option>
+                        <option value="AED">AED - UAE Dirham</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="shippingAddress">Shipping Address *</label>
+                    <textarea id="shippingAddress" rows="3" required>123 Main St, New York, NY 10001</textarea>
+                </div>
+
+                <button type="submit" class="place-order-btn" id="placeOrderBtn">
+                    🚀 Place Order & Pay
+                </button>
+            </form>
+        </div>
+
+        <!-- Order History -->
+        <div class="order-history">
+            <h2 style="margin-bottom: 20px; color: #667eea;">📜 Recent Orders</h2>
+            <div id="orderHistory">
+                <p style="text-align: center; color: #999;">No orders yet</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Products catalog
+        const products = [
+            { id: 'prod_burger', name: 'Classic Burger', price: 12.99, emoji: '🍔' },
+            { id: 'prod_pizza', name: 'Pepperoni Pizza', price: 15.99, emoji: '🍕' },
+            { id: 'prod_fries', name: 'French Fries', price: 4.99, emoji: '🍟' },
+            { id: 'prod_hotdog', name: 'Hot Dog', price: 8.99, emoji: '🌭' },
+            { id: 'prod_taco', name: 'Taco Supreme', price: 9.99, emoji: '🌮' },
+            { id: 'prod_sushi', name: 'Sushi Roll', price: 18.99, emoji: '🍣' },
+            { id: 'prod_ramen', name: 'Ramen Bowl', price: 13.99, emoji: '🍜' },
+            { id: 'prod_icecream', name: 'Ice Cream', price: 5.99, emoji: '🍦' },
+        ];
+
+        // Cart state
+        let cart = {};
+        let orderHistory = [];
+
+        // Initialize
+        function init() {
+            renderProducts();
+            loadOrderHistory();
+        }
+
+        // Render products
+        function renderProducts() {
+            const grid = document.getElementById('productsGrid');
+            grid.innerHTML = products.map(product => `
+                <div class="product-card">
+                    <div class="product-image">${product.emoji}</div>
+                    <div class="product-name">${product.name}</div>
+                    <div class="product-price">$${product.price.toFixed(2)}</div>
+                    <div class="quantity-control">
+                        <button class="quantity-btn" onclick="changeQuantity('${product.id}', -1)">-</button>
+                        <div class="quantity-display" id="qty-${product.id}">0</div>
+                        <button class="quantity-btn" onclick="changeQuantity('${product.id}', 1)">+</button>
+                    </div>
+                    <button class="add-to-cart-btn" onclick="addToCart('${product.id}')">
+                        Add to Cart
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        // Change quantity
+        function changeQuantity(productId, delta) {
+            const qtyElement = document.getElementById(`qty-${productId}`);
+            let qty = parseInt(qtyElement.textContent) + delta;
+            qty = Math.max(0, qty);
+            qtyElement.textContent = qty;
+        }
+
+        // Add to cart
+        function addToCart(productId) {
+            const qty = parseInt(document.getElementById(`qty-${productId}`).textContent);
+            if (qty === 0) {
+                showNotification('Please select quantity', 'error');
+                return;
+            }
+
+            const product = products.find(p => p.id === productId);
+            
+            if (cart[productId]) {
+                cart[productId].quantity += qty;
+            } else {
+                cart[productId] = {
+                    ...product,
+                    quantity: qty
+                };
+            }
+
+            document.getElementById(`qty-${productId}`).textContent = '0';
+            updateCartDisplay();
+            showNotification(`Added ${qty}x ${product.name} to cart`, 'success');
+        }
+
+        // Update cart display
+        function updateCartDisplay() {
+            const cartItems = document.getElementById('cartItems');
+            const cartTotal = document.getElementById('cartTotal');
+            
+            const items = Object.values(cart);
+            
+            if (items.length === 0) {
+                cartItems.innerHTML = '<p style="text-align: center; color: #999;">Cart is empty</p>';
+                cartTotal.textContent = '0.00';
+                return;
+            }
+
+            cartItems.innerHTML = items.map(item => `
+                <div class="cart-item">
+                    <span>${item.emoji} ${item.name} x${item.quantity}</span>
+                    <span>$${(item.price * item.quantity).toFixed(2)}</span>
+                </div>
+            `).join('');
+
+            const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            cartTotal.textContent = total.toFixed(2);
+        }
+
+        // Clear cart
+        function clearCart() {
+            cart = {};
+            updateCartDisplay();
+            showNotification('Cart cleared', 'success');
+        }
+
+        // Place order
+        document.getElementById('checkoutForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const items = Object.values(cart);
+            if (items.length === 0) {
+                showNotification('Cart is empty!', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('placeOrderBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Processing...';
+
+            const orderData = {
+                customer_id: document.getElementById('customerId').value,
+                customer_email: document.getElementById('customerEmail').value,
+                currency: document.getElementById('currency').value,
+                payment_method: document.getElementById('paymentMethod').value,
+                shipping_address: document.getElementById('shippingAddress').value,
+                items: items.map(item => ({
+                    product_id: item.id,
+                    product_name: item.name,
+                    quantity: item.quantity,
+                    unit_price: item.price
+                }))
+            };
+
+            try {
+                const response = await fetch('http://localhost:8080/api/v1/order_svc/orders', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(orderData)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showNotification('✅ Order placed successfully!', 'success');
+                    cart = {};
+                    updateCartDisplay();
+                    addToOrderHistory(result.order);
+                } else {
+                    showNotification('❌ ' + result.message, 'error');
+                    if (result.order) {
+                        addToOrderHistory(result.order);
+                    }
+                }
+            } catch (error) {
+                showNotification('❌ Failed to connect to server', 'error');
+                console.error(error);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🚀 Place Order & Pay';
+            }
+        });
+
+        // Show notification
+        function showNotification(message, type) {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        // Add to order history
+        function addToOrderHistory(order) {
+            orderHistory.unshift(order);
+            localStorage.setItem('orderHistory', JSON.stringify(orderHistory));
+            renderOrderHistory();
+        }
+
+        // Load order history
+        function loadOrderHistory() {
+            const saved = localStorage.getItem('orderHistory');
+            if (saved) {
+                orderHistory = JSON.parse(saved);
+                renderOrderHistory();
+            }
+        }
+
+        // Render order history
+        function renderOrderHistory() {
+            const container = document.getElementById('orderHistory');
+            
+            if (orderHistory.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #999;">No orders yet</p>';
+                return;
+            }
+
+            container.innerHTML = orderHistory.slice(0, 5).map(order => `
+                <div class="order-item">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                        <strong>Order #${order.id.substring(0, 12)}...</strong>
+                        <span class="order-status status-${order.status}">${order.status.toUpperCase()}</span>
+                    </div>
+                    <div style="color: #666;">
+                        ${order.items.length} items • $${order.total_amount.toFixed(2)} ${order.currency}
+                    </div>
+                    <div style="color: #999; font-size: 0.9em; margin-top: 5px;">
+                        ${new Date(order.created_at).toLocaleString()}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Initialize app
+        init();
+    </script>
+</body>
+</html>

@@ -49,6 +49,19 @@ func main() {
 		w.Write([]byte(`{"status":"healthy","service":"order-service","database":"connected"}`))
 	}).Methods(http.MethodGet)
 
+	sm.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
+
 	getRouter := sm.Methods(http.MethodGet).Subrouter()
 	getRouter.HandleFunc("/orders", oh.GetOrders)
 	getRouter.HandleFunc("/orders/{id}", oh.GetOrder)
