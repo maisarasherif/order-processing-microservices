@@ -9,6 +9,7 @@ services:
       - "8080:80"       
     volumes:
       - ./nginx/:/etc/nginx/
+      - ../frontend:/usr/share/nginx/html:ro
     networks:
       - microservices-network
 networks:
