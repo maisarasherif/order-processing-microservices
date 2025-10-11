@@ -18,10 +18,11 @@ type PaymentRequest struct {
 	IdempotencyKey string  `json:"idempotency_key"`
 }
 
+// Updated response structure to match new payment service format
 type PaymentResponse struct {
-	Success bool    `json:"success"`
-	Message string  `json:"message"`
-	Payment Payment `json:"payment"`
+	Data    *Payment `json:"data,omitempty"`    // Success response
+	Error   string   `json:"error,omitempty"`   // Error response
+	Payment Payment  `json:"payment,omitempty"` // Backwards compatibility
 }
 
 type Payment struct {
@@ -45,7 +46,6 @@ type Client struct {
 func NewClient(baseURL string) *Client {
 	return &Client{
 		baseURL: baseURL,
-
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -53,7 +53,6 @@ func NewClient(baseURL string) *Client {
 }
 
 func (c *Client) ProcessPayment(req PaymentRequest) (*PaymentResponse, error) {
-
 	jsonData, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal payment request: %w", err)
@@ -71,7 +70,6 @@ func (c *Client) ProcessPayment(req PaymentRequest) (*PaymentResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
-
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
@@ -84,16 +82,23 @@ func (c *Client) ProcessPayment(req PaymentRequest) (*PaymentResponse, error) {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPaymentRequired {
-		return nil, fmt.Errorf("payment service returned status %d: %s",
-			resp.StatusCode, paymentResp.Message)
+	// Handle new response format with "data" wrapper
+	if paymentResp.Data != nil {
+		paymentResp.Payment = *paymentResp.Data
+	}
+
+	// Check for error responses
+	if resp.StatusCode >= 400 {
+		if paymentResp.Error != "" {
+			return nil, fmt.Errorf("payment failed: %s", paymentResp.Error)
+		}
+		return nil, fmt.Errorf("payment service returned status %d", resp.StatusCode)
 	}
 
 	return &paymentResp, nil
 }
 
 func (c *Client) GetPaymentStatus(paymentID string) (*PaymentResponse, error) {
-
 	url := c.baseURL + "/payments/" + paymentID
 	httpReq, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -116,7 +121,15 @@ func (c *Client) GetPaymentStatus(paymentID string) (*PaymentResponse, error) {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
+	// Handle new response format
+	if paymentResp.Data != nil {
+		paymentResp.Payment = *paymentResp.Data
+	}
+
 	if resp.StatusCode != http.StatusOK {
+		if paymentResp.Error != "" {
+			return nil, fmt.Errorf("payment service error: %s", paymentResp.Error)
+		}
 		return nil, fmt.Errorf("payment service returned status %d", resp.StatusCode)
 	}
 
