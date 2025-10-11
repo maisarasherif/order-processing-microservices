@@ -15,17 +15,15 @@ import (
 )
 
 func main() {
-	// Create logger
+
 	l := log.New(os.Stdout, "payment-service: ", log.LstdFlags)
 
-	// Load configuration from environment variables
 	l.Println("Loading configuration...")
 	cfg, err := config.Load()
 	if err != nil {
 		l.Fatal("Failed to load configuration:", err)
 	}
 
-	// Initialize database repository
 	l.Println("Connecting to PostgreSQL...")
 	repo, err := repository.NewPostgresRepository(cfg.GetDatabaseConnectionString())
 	if err != nil {
@@ -34,33 +32,39 @@ func main() {
 	defer repo.Close()
 	l.Println("✓ Database connection established")
 
-	// Create payment handler with repository
 	ph := handlers.NewPaymentsWithRepository(l, repo)
 
-	// Create main router
 	sm := mux.NewRouter()
 
-	// Health check endpoint
 	sm.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"healthy","service":"payment-service","database":"connected"}`))
 	}).Methods(http.MethodGet)
 
-	// Statistics endpoint (new!)
+	sm.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
+
 	sm.HandleFunc("/payments/stats", ph.GetStatistics).Methods(http.MethodGet)
 
-	// GET /payments - List all payments
 	getRouter := sm.Methods(http.MethodGet).Subrouter()
 	getRouter.HandleFunc("/payments", ph.GetPayments)
 	getRouter.HandleFunc("/payments/{id}", ph.GetPayment)
 
-	// POST /payments - Process a new payment
 	postRouter := sm.Methods(http.MethodPost).Subrouter()
 	postRouter.HandleFunc("/payments", ph.ProcessPayment)
 	postRouter.Use(ph.MiddlewarePaymentValidation)
 
-	// Configure HTTP server
 	s := &http.Server{
 		Addr:         ":" + cfg.Server.Port,
 		Handler:      sm,
@@ -69,7 +73,6 @@ func main() {
 		WriteTimeout: 10 * time.Second,
 	}
 
-	// Start server in goroutine
 	go func() {
 		l.Println("===========================================")
 		l.Println("💳 Payment Service Starting...")
@@ -107,14 +110,12 @@ func main() {
 	tc, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Close database connection
 	if err := repo.Close(); err != nil {
 		l.Printf("Error closing database: %v\n", err)
 	} else {
 		l.Println("✓ Database connection closed")
 	}
 
-	// Shutdown HTTP server
 	if err := s.Shutdown(tc); err != nil {
 		l.Printf("Error during shutdown: %v\n", err)
 	} else {

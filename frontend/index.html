@@ -293,6 +293,13 @@
             cursor: pointer;
             margin-left: 10px;
         }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: white;
+            font-size: 1.5em;
+        }
     </style>
 </head>
 <body>
@@ -312,8 +319,10 @@
             <button class="clear-cart-btn" onclick="clearCart()">Clear Cart</button>
         </div>
 
-        <!-- Products -->
-        <div class="products-grid" id="productsGrid"></div>
+        <!-- Products (loaded from server) -->
+        <div id="productsContainer">
+            <div class="loading">Loading products...</div>
+        </div>
 
         <!-- Checkout Form -->
         <div class="checkout-section">
@@ -370,30 +379,41 @@
     </div>
 
     <script>
-        // Products catalog
-        const products = [
-            { id: 'prod_burger', name: 'Classic Burger', price: 12.99, emoji: '🍔' },
-            { id: 'prod_pizza', name: 'Pepperoni Pizza', price: 15.99, emoji: '🍕' },
-            { id: 'prod_fries', name: 'French Fries', price: 4.99, emoji: '🍟' },
-            { id: 'prod_hotdog', name: 'Hot Dog', price: 8.99, emoji: '🌭' },
-            { id: 'prod_taco', name: 'Taco Supreme', price: 9.99, emoji: '🌮' },
-            { id: 'prod_sushi', name: 'Sushi Roll', price: 18.99, emoji: '🍣' },
-            { id: 'prod_ramen', name: 'Ramen Bowl', price: 13.99, emoji: '🍜' },
-            { id: 'prod_icecream', name: 'Ice Cream', price: 5.99, emoji: '🍦' },
-        ];
-
-        // Cart state
+        // Global state
+        let products = [];
         let cart = {};
         let orderHistory = [];
 
         // Initialize
-        function init() {
-            renderProducts();
+        async function init() {
+            await loadProducts();
             loadOrderHistory();
+        }
+
+        // Load products from server
+        async function loadProducts() {
+            try {
+                const response = await fetch('/api/v1/order_svc/products');
+                const result = await response.json();
+                
+                if (result.data) {
+                    products = result.data;
+                    renderProducts();
+                } else {
+                    showNotification('Failed to load products', 'error');
+                }
+            } catch (error) {
+                console.error('Failed to load products:', error);
+                document.getElementById('productsContainer').innerHTML = 
+                    '<div class="loading" style="color: #dc3545;">Failed to load products. Please refresh.</div>';
+            }
         }
 
         // Render products
         function renderProducts() {
+            const container = document.getElementById('productsContainer');
+            container.innerHTML = '<div class="products-grid" id="productsGrid"></div>';
+            
             const grid = document.getElementById('productsGrid');
             grid.innerHTML = products.map(product => `
                 <div class="product-card">
@@ -475,7 +495,7 @@
             showNotification('Cart cleared', 'success');
         }
 
-        // Place order
+        // Place order - NEW: Only sends product_id + quantity
         document.getElementById('checkoutForm').addEventListener('submit', async (e) => {
             e.preventDefault();
 
@@ -489,6 +509,7 @@
             btn.disabled = true;
             btn.textContent = '⏳ Processing...';
 
+            // NEW REQUEST FORMAT: No prices!
             const orderData = {
                 customer_id: document.getElementById('customerId').value,
                 customer_email: document.getElementById('customerEmail').value,
@@ -497,31 +518,27 @@
                 shipping_address: document.getElementById('shippingAddress').value,
                 items: items.map(item => ({
                     product_id: item.id,
-                    product_name: item.name,
-                    quantity: item.quantity,
-                    unit_price: item.price
+                    quantity: item.quantity
+                    // NO unit_price! Server decides!
                 }))
             };
 
             try {
                 const response = await fetch("/api/v1/order_svc/orders", {
-                                        method: "POST",
-                                        headers: { "Content-Type": "application/json" },
-                                        body: JSON.stringify(orderData)
-                                        });
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(orderData)
+                });
 
                 const result = await response.json();
 
-                if (result.success) {
+                if (response.ok && result.data) {
                     showNotification('✅ Order placed successfully!', 'success');
                     cart = {};
                     updateCartDisplay();
-                    addToOrderHistory(result.order);
+                    addToOrderHistory(result.data);
                 } else {
-                    showNotification('❌ ' + result.message, 'error');
-                    if (result.order) {
-                        addToOrderHistory(result.order);
-                    }
+                    showNotification('❌ ' + (result.error || 'Order failed'), 'error');
                 }
             } catch (error) {
                 showNotification('❌ Failed to connect to server', 'error');

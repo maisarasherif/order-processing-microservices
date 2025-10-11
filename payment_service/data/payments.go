@@ -77,6 +77,7 @@ func validatePaymentMethod(fl validator.FieldLevel) bool {
 		"debit_card":    true,
 		"paypal":        true,
 		"bank_transfer": true,
+		"apple_pay":     true,
 	}
 	return validMethods[fl.Field().String()]
 }

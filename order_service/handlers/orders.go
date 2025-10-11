@@ -27,121 +27,135 @@ func NewOrdersHandler(l *log.Logger, repo repository.OrderRepository, paymentCli
 	}
 }
 
-type OrderResponse struct {
-	Success bool        `json:"success"`
-	Message string      `json:"message"`
-	Order   *data.Order `json:"order,omitempty"`
+// ============ RESPONSE STRUCTURES ============
+
+type SuccessResponse struct {
+	Data interface{} `json:"data"`
 }
 
-type OrdersListResponse struct {
-	Success bool          `json:"success"`
-	Message string        `json:"message"`
-	Orders  []*data.Order `json:"orders"`
-	Count   int           `json:"count"`
+type ErrorResponse struct {
+	Error   string `json:"error"`
+	Details string `json:"details,omitempty"`
 }
+
+func respondJSON(w http.ResponseWriter, status int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(SuccessResponse{Data: data})
+}
+
+func respondError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(ErrorResponse{Error: message})
+}
+
+// ============ PRODUCT ENDPOINTS ============
+
+func (o *Orders) GetProducts(w http.ResponseWriter, r *http.Request) {
+	o.l.Println("Handle GET Products")
+
+	products, err := o.repo.GetAvailableProducts()
+	if err != nil {
+		o.l.Println("[ERROR] retrieving products:", err)
+		respondError(w, http.StatusInternalServerError, "Failed to retrieve products")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, products)
+}
+
+func (o *Orders) GetProduct(w http.ResponseWriter, r *http.Request) {
+	o.l.Println("Handle GET Product by ID")
+
+	vars := mux.Vars(r)
+	productID := vars["id"]
+
+	product, err := o.repo.GetProduct(productID)
+	if err == data.ErrProductNotFound {
+		respondError(w, http.StatusNotFound, "Product not found")
+		return
+	}
+	if err != nil {
+		o.l.Println("[ERROR] retrieving product:", err)
+		respondError(w, http.StatusInternalServerError, "Failed to retrieve product")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, product)
+}
+
+// ============ ORDER ENDPOINTS ============
 
 func (o *Orders) GetOrders(w http.ResponseWriter, r *http.Request) {
 	o.l.Println("Handle GET Orders")
-	w.Header().Set("Content-Type", "application/json")
 
 	orders, err := o.repo.GetAll()
 	if err != nil {
 		o.l.Println("[ERROR] retrieving orders:", err)
-		response := OrdersListResponse{
-			Success: false,
-			Message: "Failed to retrieve orders",
-		}
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(response)
+		respondError(w, http.StatusInternalServerError, "Failed to retrieve orders")
 		return
 	}
 
-	response := OrdersListResponse{
-		Success: true,
-		Message: "Orders retrieved successfully",
-		Orders:  orders,
-		Count:   len(orders),
-	}
-
-	json.NewEncoder(w).Encode(response)
+	respondJSON(w, http.StatusOK, orders)
 }
 
 func (o *Orders) GetOrder(w http.ResponseWriter, r *http.Request) {
 	o.l.Println("Handle GET Order by ID")
-	w.Header().Set("Content-Type", "application/json")
 
 	vars := mux.Vars(r)
 	orderID := vars["id"]
 
 	order, err := o.repo.GetByID(orderID)
-
 	if err == data.ErrOrderNotFound {
-		response := OrderResponse{
-			Success: false,
-			Message: "Order not found",
-		}
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(response)
+		respondError(w, http.StatusNotFound, "Order not found")
 		return
 	}
-
 	if err != nil {
 		o.l.Println("[ERROR] retrieving order:", err)
-		response := OrderResponse{
-			Success: false,
-			Message: "Error retrieving order",
-		}
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(response)
+		respondError(w, http.StatusInternalServerError, "Failed to retrieve order")
 		return
 	}
 
-	response := OrderResponse{
-		Success: true,
-		Message: "Order retrieved successfully",
-		Order:   order,
-	}
-
-	json.NewEncoder(w).Encode(response)
+	respondJSON(w, http.StatusOK, order)
 }
 
 func (o *Orders) CreateOrder(w http.ResponseWriter, r *http.Request) {
-	o.l.Println("Handle POST Order - Create Order")
-	w.Header().Set("Content-Type", "application/json")
+	o.l.Println("Handle POST Order - Create Order with Payment")
 
-	order := r.Context().Value(KeyOrder{}).(data.Order)
+	// Get validated request from context
+	orderReq := r.Context().Value(KeyOrderRequest{}).(data.CreateOrderRequest)
 
+	// Build order with server-validated prices
+	order, err := o.buildOrderFromRequest(orderReq)
+	if err != nil {
+		o.l.Println("[ERROR] building order:", err)
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Generate order ID and set initial state
 	order.ID = data.GenerateOrderID()
 	order.Status = data.OrderStatusPending
 	order.CreatedAt = data.Now()
 	order.UpdatedAt = data.Now()
 
-	order.CalculateTotal()
-
+	// Validate total amount
 	if order.TotalAmount <= 0 {
-		response := OrderResponse{
-			Success: false,
-			Message: "Invalid order total",
-		}
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(response)
+		respondError(w, http.StatusBadRequest, "Invalid order total")
 		return
 	}
 
-	err := o.repo.Create(&order)
-	if err != nil {
+	// Create order in database
+	if err := o.repo.Create(order); err != nil {
 		o.l.Println("[ERROR] creating order:", err)
-		response := OrderResponse{
-			Success: false,
-			Message: "Failed to create order",
-		}
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(response)
+		respondError(w, http.StatusInternalServerError, "Failed to create order")
 		return
 	}
 
 	o.l.Printf("Order %s created, initiating payment...\n", order.ID)
 
+	// Process payment
 	paymentReq := payment.PaymentRequest{
 		OrderID:        order.ID,
 		Amount:         order.TotalAmount,
@@ -154,59 +168,40 @@ func (o *Orders) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	paymentResp, err := o.paymentClient.ProcessPayment(paymentReq)
 	if err != nil {
 		o.l.Println("[ERROR] processing payment:", err)
-
 		o.repo.UpdateStatus(order.ID, data.OrderStatusFailed)
-
-		response := OrderResponse{
-			Success: false,
-			Message: "Payment service unavailable",
-			Order:   &order,
-		}
-		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(response)
+		order.Status = data.OrderStatusFailed
+		respondError(w, http.StatusServiceUnavailable, "Payment service unavailable")
 		return
 	}
 
+	// Update order with payment info
 	order.PaymentID = paymentResp.Payment.ID
-	o.repo.UpdatePaymentID(order.ID, paymentResp.Payment.ID)
+	if err := o.repo.UpdatePaymentID(order.ID, paymentResp.Payment.ID); err != nil {
+		o.l.Printf("[ERROR] updating payment ID: %v\n", err)
+	}
 
+	// Handle payment result
 	if paymentResp.Payment.Status == "completed" {
-
-		o.repo.UpdateStatus(order.ID, data.OrderStatusPaid)
+		if err := o.repo.UpdateStatus(order.ID, data.OrderStatusPaid); err != nil {
+			o.l.Printf("[CRITICAL] Order %s paid but status update failed: %v\n", order.ID, err)
+		}
 		order.Status = data.OrderStatusPaid
 
-		o.l.Printf("Order %s paid successfully with payment %s\n",
-			order.ID, paymentResp.Payment.ID)
-
-		response := OrderResponse{
-			Success: true,
-			Message: "Order created and paid successfully",
-			Order:   &order,
-		}
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(response)
+		o.l.Printf("Order %s paid successfully with payment %s\n", order.ID, paymentResp.Payment.ID)
+		respondJSON(w, http.StatusCreated, order)
 	} else {
-
-		o.repo.UpdateStatus(order.ID, data.OrderStatusFailed)
+		if err := o.repo.UpdateStatus(order.ID, data.OrderStatusFailed); err != nil {
+			o.l.Printf("[ERROR] Failed to update failed order status: %v\n", err)
+		}
 		order.Status = data.OrderStatusFailed
 
-		o.l.Printf("Order %s payment failed: %s\n",
-			order.ID, paymentResp.Payment.ErrorMessage)
-
-		response := OrderResponse{
-			Success: false,
-			Message: fmt.Sprintf("Order created but payment failed: %s",
-				paymentResp.Payment.ErrorMessage),
-			Order: &order,
-		}
-		w.WriteHeader(http.StatusPaymentRequired)
-		json.NewEncoder(w).Encode(response)
+		o.l.Printf("Order %s payment failed: %s\n", order.ID, paymentResp.Payment.ErrorMessage)
+		respondError(w, http.StatusPaymentRequired, "Payment failed: "+paymentResp.Payment.ErrorMessage)
 	}
 }
 
 func (o *Orders) GetCustomerOrders(w http.ResponseWriter, r *http.Request) {
 	o.l.Println("Handle GET Customer Orders")
-	w.Header().Set("Content-Type", "application/json")
 
 	vars := mux.Vars(r)
 	customerID := vars["id"]
@@ -214,50 +209,86 @@ func (o *Orders) GetCustomerOrders(w http.ResponseWriter, r *http.Request) {
 	orders, err := o.repo.GetByCustomerID(customerID)
 	if err != nil {
 		o.l.Println("[ERROR] retrieving customer orders:", err)
-		response := OrdersListResponse{
-			Success: false,
-			Message: "Failed to retrieve customer orders",
-		}
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(response)
+		respondError(w, http.StatusInternalServerError, "Failed to retrieve customer orders")
 		return
 	}
 
-	response := OrdersListResponse{
-		Success: true,
-		Message: "Customer orders retrieved successfully",
-		Orders:  orders,
-		Count:   len(orders),
-	}
-
-	json.NewEncoder(w).Encode(response)
+	respondJSON(w, http.StatusOK, orders)
 }
 
-type KeyOrder struct{}
+// ============ HELPER FUNCTIONS ============
+
+// buildOrderFromRequest validates products and builds order with server prices
+func (o *Orders) buildOrderFromRequest(req data.CreateOrderRequest) (*data.Order, error) {
+	order := &data.Order{
+		CustomerID:      req.CustomerID,
+		CustomerEmail:   req.CustomerEmail,
+		Currency:        req.Currency,
+		PaymentMethod:   req.PaymentMethod,
+		ShippingAddress: req.ShippingAddress,
+		Items:           make([]data.OrderItem, 0, len(req.Items)),
+	}
+
+	// Validate each item and fetch server prices
+	for _, itemReq := range req.Items {
+		// Fetch product from database
+		product, err := o.repo.GetProduct(itemReq.ProductID)
+		if err == data.ErrProductNotFound {
+			return nil, fmt.Errorf("product not found: %s", itemReq.ProductID)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch product %s: %w", itemReq.ProductID, err)
+		}
+
+		// Check if product is available
+		if !product.Available {
+			return nil, fmt.Errorf("product unavailable: %s", product.Name)
+		}
+
+		// Build order item with SERVER price (ignore any client price)
+		orderItem := data.OrderItem{
+			ProductID:   product.ID,
+			ProductName: product.Name,
+			Quantity:    itemReq.Quantity,
+			UnitPrice:   product.Price, // ← SERVER decides price!
+			Subtotal:    product.Price * float64(itemReq.Quantity),
+		}
+
+		order.Items = append(order.Items, orderItem)
+	}
+
+	// Calculate total
+	order.CalculateTotal()
+
+	return order, nil
+}
+
+// ============ MIDDLEWARE ============
+
+type KeyOrderRequest struct{}
 
 func (o *Orders) MiddlewareOrderValidation(next http.Handler) http.Handler {
-
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		order := data.Order{}
+		orderReq := data.CreateOrderRequest{}
 
-		err := order.FromJSON(r.Body)
+		// Decode JSON from request body
+		err := orderReq.FromJSON(r.Body)
 		if err != nil {
-			o.l.Println("[ERROR] deserializing order", err)
-			http.Error(w, "Error reading order data", http.StatusBadRequest)
+			o.l.Println("[ERROR] deserializing order request:", err)
+			respondError(w, http.StatusBadRequest, "Invalid request body")
 			return
 		}
 
-		err = order.Validate()
+		// Validate the request
+		err = orderReq.Validate()
 		if err != nil {
-			o.l.Println("[ERROR] validating order", err)
-			http.Error(w,
-				fmt.Sprintf("Error validating order: %s", err),
-				http.StatusBadRequest,
-			)
+			o.l.Println("[ERROR] validating order request:", err)
+			respondError(w, http.StatusBadRequest, "Validation error: "+err.Error())
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), KeyOrder{}, order)
+		// Add validated request to context
+		ctx := context.WithValue(r.Context(), KeyOrderRequest{}, orderReq)
 		r = r.WithContext(ctx)
 
 		next.ServeHTTP(w, r)

@@ -15,10 +15,8 @@ type PostgresRepository struct {
 }
 
 func NewPostgresRepository(connectionString string) (*PostgresRepository, error) {
-
 	db, err := sql.Open("postgres", connectionString)
 	if err != nil {
-
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
@@ -33,8 +31,116 @@ func NewPostgresRepository(connectionString string) (*PostgresRepository, error)
 	return &PostgresRepository{db: db}, nil
 }
 
-func (r *PostgresRepository) Create(order *data.Order) error {
+// ============ PRODUCT OPERATIONS ============
 
+func (r *PostgresRepository) GetProduct(id string) (*data.Product, error) {
+	query := `
+		SELECT id, name, description, price, emoji, category, available, created_at, updated_at
+		FROM products
+		WHERE id = $1
+	`
+
+	product := &data.Product{}
+	var description sql.NullString
+
+	err := r.db.QueryRow(query, id).Scan(
+		&product.ID,
+		&product.Name,
+		&description,
+		&product.Price,
+		&product.Emoji,
+		&product.Category,
+		&product.Available,
+		&product.CreatedAt,
+		&product.UpdatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, data.ErrProductNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get product: %w", err)
+	}
+
+	if description.Valid {
+		product.Description = description.String
+	}
+
+	return product, nil
+}
+
+func (r *PostgresRepository) GetAllProducts() ([]*data.Product, error) {
+	query := `
+		SELECT id, name, description, price, emoji, category, available, created_at, updated_at
+		FROM products
+		ORDER BY category, name
+	`
+
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query products: %w", err)
+	}
+	defer rows.Close()
+
+	return r.scanProducts(rows)
+}
+
+func (r *PostgresRepository) GetAvailableProducts() ([]*data.Product, error) {
+	query := `
+		SELECT id, name, description, price, emoji, category, available, created_at, updated_at
+		FROM products
+		WHERE available = true
+		ORDER BY category, name
+	`
+
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query available products: %w", err)
+	}
+	defer rows.Close()
+
+	return r.scanProducts(rows)
+}
+
+func (r *PostgresRepository) scanProducts(rows *sql.Rows) ([]*data.Product, error) {
+	var products []*data.Product
+
+	for rows.Next() {
+		product := &data.Product{}
+		var description sql.NullString
+
+		err := rows.Scan(
+			&product.ID,
+			&product.Name,
+			&description,
+			&product.Price,
+			&product.Emoji,
+			&product.Category,
+			&product.Available,
+			&product.CreatedAt,
+			&product.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan product: %w", err)
+		}
+
+		if description.Valid {
+			product.Description = description.String
+		}
+
+		products = append(products, product)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating products: %w", err)
+	}
+
+	return products, nil
+}
+
+// ============ ORDER OPERATIONS ============
+
+func (r *PostgresRepository) Create(order *data.Order) error {
 	tx, err := r.db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -144,50 +250,9 @@ func (r *PostgresRepository) GetAll() ([]*data.Order, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query orders: %w", err)
 	}
-
 	defer rows.Close()
 
-	var orders []*data.Order
-
-	for rows.Next() {
-		order := &data.Order{}
-		var itemsJSON []byte
-		var paymentID sql.NullString
-
-		err := rows.Scan(
-			&order.ID,
-			&order.CustomerID,
-			&order.CustomerEmail,
-			&itemsJSON,
-			&order.TotalAmount,
-			&order.Currency,
-			&order.Status,
-			&paymentID,
-			&order.PaymentMethod,
-			&order.ShippingAddress,
-			&order.CreatedAt,
-			&order.UpdatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan order: %w", err)
-		}
-
-		if err := json.Unmarshal(itemsJSON, &order.Items); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal items: %w", err)
-		}
-
-		if paymentID.Valid {
-			order.PaymentID = paymentID.String
-		}
-
-		orders = append(orders, order)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating orders: %w", err)
-	}
-
-	return orders, nil
+	return r.scanOrders(rows)
 }
 
 func (r *PostgresRepository) GetByCustomerID(customerID string) ([]*data.Order, error) {
@@ -206,6 +271,10 @@ func (r *PostgresRepository) GetByCustomerID(customerID string) ([]*data.Order, 
 	}
 	defer rows.Close()
 
+	return r.scanOrders(rows)
+}
+
+func (r *PostgresRepository) scanOrders(rows *sql.Rows) ([]*data.Order, error) {
 	var orders []*data.Order
 
 	for rows.Next() {
