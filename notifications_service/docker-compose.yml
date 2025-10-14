@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database for notifications
+  notification_db:
+    image: postgres:16-alpine
+    container_name: notification_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: notifuser
+      POSTGRES_PASSWORD: notifpass
+      POSTGRES_DB: notification_db
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C"
+    ports:
+      - "5434:5432"  # Different port to avoid conflict with other DBs
+    volumes:
+      - notification_db_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notifuser -d notification_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - notification-network
+
+  # Notification Service (Python FastAPI)
+  notification_service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: notification_service
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    environment:
+      # Database configuration
+      DB_HOST: notification_db
+      DB_PORT: 5432
+      DB_USER: notifuser
+      DB_PASSWORD: notifpass
+      DB_NAME: notification_db
+      
+      # SMTP configuration (update with your credentials)
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 587
+      SMTP_USER: maisara.sherif.ms@gmail.com
+      SMTP_PASSWORD: xxxxxxxxxxxx
+      
+      # Service configuration
+      FROM_EMAIL: maisara.sherif.ms@gmail.com
+      FROM_NAME: Food Order System
+      SERVICE_PORT: 8083
+      LOG_LEVEL: info
+      
+      # Other microservices (Docker internal network)
+      ORDER_SERVICE_URL: http://order_service:8081
+      PAYMENT_SERVICE_URL: http://payment_service:8082
+    
+    depends_on:
+      notification_db:
+        condition: service_healthy
+    
+    networks:
+      - notification-network
+      - microservices-network  # Connect to other services
+    
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8083/health')"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  notification_db_data:
+    driver: local
+
+networks:
+  notification-network:
+    driver: bridge
+  microservices-network:
+    external: true  # Shared network with order and payment services
