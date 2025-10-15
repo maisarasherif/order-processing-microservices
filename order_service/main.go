@@ -11,6 +11,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/maisarasherif/order-processing-microservices/order_service/config"
 	"github.com/maisarasherif/order-processing-microservices/order_service/handlers"
+	"github.com/maisarasherif/order-processing-microservices/order_service/notifications"
 	"github.com/maisarasherif/order-processing-microservices/order_service/payment"
 	"github.com/maisarasherif/order-processing-microservices/order_service/repository"
 )
@@ -39,7 +40,9 @@ func main() {
 	paymentClient := payment.NewClient(cfg.Payment.URL)
 	l.Printf("✓ Payment service client configured: %s\n", cfg.Payment.URL)
 
-	oh := handlers.NewOrdersHandler(l, repo, paymentClient)
+	notificationClient := notifications.NewClient(cfg.Notification.URL)
+
+	oh := handlers.NewOrdersHandler(l, repo, paymentClient, notificationClient)
 
 	sm := mux.NewRouter()
 

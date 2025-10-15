@@ -7,9 +7,10 @@ import (
 )
 
 type Config struct {
-	Database DatabaseConfig
-	Server   ServerConfig
-	Payment  PaymentServiceConfig
+	Database     DatabaseConfig
+	Server       ServerConfig
+	Payment      PaymentServiceConfig
+	Notification NotificationServiceConfig
 }
 
 type DatabaseConfig struct {
@@ -30,6 +31,10 @@ type PaymentServiceConfig struct {
 	URL string
 }
 
+type NotificationServiceConfig struct {
+	URL string
+}
+
 func Load() (*Config, error) {
 
 	config := &Config{
@@ -47,6 +52,9 @@ func Load() (*Config, error) {
 		},
 		Payment: PaymentServiceConfig{
 			URL: getEnv("PAYMENT_SERVICE_URL", "http://payment_service:8082"),
+		},
+		Notification: NotificationServiceConfig{
+			URL: getEnv("NOTIFICATION_SERVICE_URL", "http://notification_service:8083"),
 		},
 	}
 

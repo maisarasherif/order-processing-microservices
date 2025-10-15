@@ -9,21 +9,24 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/maisarasherif/order-processing-microservices/order_service/data"
+	"github.com/maisarasherif/order-processing-microservices/order_service/notifications"
 	"github.com/maisarasherif/order-processing-microservices/order_service/payment"
 	"github.com/maisarasherif/order-processing-microservices/order_service/repository"
 )
 
 type Orders struct {
-	l             *log.Logger
-	repo          repository.OrderRepository
-	paymentClient *payment.Client
+	l                  *log.Logger
+	repo               repository.OrderRepository
+	paymentClient      *payment.Client
+	notificationClient *notifications.Client
 }
 
-func NewOrdersHandler(l *log.Logger, repo repository.OrderRepository, paymentClient *payment.Client) *Orders {
+func NewOrdersHandler(l *log.Logger, repo repository.OrderRepository, paymentClient *payment.Client, notificationClient *notifications.Client) *Orders {
 	return &Orders{
-		l:             l,
-		repo:          repo,
-		paymentClient: paymentClient,
+		l:                  l,
+		repo:               repo,
+		paymentClient:      paymentClient,
+		notificationClient: notificationClient,
 	}
 }
 
@@ -188,6 +191,10 @@ func (o *Orders) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		order.Status = data.OrderStatusPaid
 
 		o.l.Printf("Order %s paid successfully with payment %s\n", order.ID, paymentResp.Payment.ID)
+
+		// Send order confirmation notification (async - don't block response)
+		go o.sendOrderConfirmation(order)
+
 		respondJSON(w, http.StatusCreated, order)
 	} else {
 		if err := o.repo.UpdateStatus(order.ID, data.OrderStatusFailed); err != nil {
@@ -217,6 +224,19 @@ func (o *Orders) GetCustomerOrders(w http.ResponseWriter, r *http.Request) {
 }
 
 // ============ HELPER FUNCTIONS ============
+
+// sendOrderConfirmation sends order confirmation notification
+// Runs async to not block order response
+func (o *Orders) sendOrderConfirmation(order *data.Order) {
+	// Send receipt (notification service fetches order and payment details)
+	err := o.notificationClient.SendReceipt(order.ID, order.CustomerEmail)
+
+	if err != nil {
+		o.l.Printf("[WARNING] Failed to send receipt: %v\n", err)
+	} else {
+		o.l.Printf("✓ Receipt sent to %s\n", order.CustomerEmail)
+	}
+}
 
 // buildOrderFromRequest validates products and builds order with server prices
 func (o *Orders) buildOrderFromRequest(req data.CreateOrderRequest) (*data.Order, error) {
