@@ -1,0 +1,129 @@
+version: '3.8'
+
+services:
+  # ============ VAULT SERVER ============
+  # Enterprise-grade secrets and PKI management
+  # Will issue all certificates for Consul
+  vault:
+    image: hashicorp/vault:1.20
+    container_name: vault-server
+    restart: unless-stopped
+    
+    # ============ VOLUMES ============
+    volumes:
+      # Vault configuration
+      - ./vault/config.hcl:/vault/config/config.hcl:ro
+      
+      # Vault data (file storage backend)
+      - vault_data:/vault/data
+      
+      # For storing generated policies/scripts
+      - ./vault/policies:/vault/policies:rw
+    
+    # ============ NETWORKING ============
+    ports:
+      # Vault API (HTTP for initial setup, HTTPS in production)
+      - "8200:8200"
+    
+    networks:
+      - microservices-network
+    
+    # ============ ENVIRONMENT ============
+    environment:
+      # Address Vault listens on
+      VAULT_ADDR: "http://127.0.0.1:8200"
+      
+      # Disable memory lock in dev mode (comment in production)
+      VAULT_SKIP_VERIFY: "true"
+    
+    # ============ STARTUP COMMAND ============
+    entrypoint: "vault"
+    command:
+      - "server"
+      - "-config=/vault/config/config.hcl"
+    
+    # ============ HEALTH CHECK ============
+    healthcheck:
+      test:
+        - "CMD"
+        - "sh"
+        - "-c"
+        - "curl -f http://127.0.0.1:8200/v1/sys/health || true"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    
+    cap_add:
+      - IPC_LOCK  # Allow memory locking (security feature)
+
+  # ============ CONSUL SERVER ============
+  # Now configured to use Vault for certificate authority
+  consul-server:
+    image: consul:1.15
+    container_name: consul-server
+    restart: unless-stopped
+    
+    depends_on:
+      vault:
+        condition: service_healthy
+    
+    # ============ VOLUMES ============
+    volumes:
+      # Consul config (updated to use Vault CA)
+      - ./consul/consul-server.hcl:/etc/consul/consul-server.hcl:ro
+      
+      # TLS certificates (still needed for server-to-server comms)
+      - ./consul/tls/ca.crt:/etc/consul/tls/ca.crt:ro
+      - ./consul/tls/server.crt:/etc/consul/tls/server.crt:ro
+      - ./consul/tls/server.key:/etc/consul/tls/server.key:ro
+      
+      # Config directory
+      - ./consul/config.d:/etc/consul/config.d:ro
+      
+      # Persistent data
+      - consul_data:/consul/data
+    
+    # ============ NETWORKING ============
+    ports:
+      - "8500:8500"  # HTTP API
+      - "8501:8501"  # HTTPS API
+      - "8600:8600"  # DNS
+      - "8502:8502"  # gRPC
+    
+    networks:
+      - microservices-network
+    
+    # ============ ENVIRONMENT ============
+    environment:
+      CONSUL_LOG_LEVEL: "info"
+      CONSUL_ADVERTISE: "127.0.0.1"
+    
+    # ============ STARTUP COMMAND ============
+    command:
+      - "agent"
+      - "-config-file=/etc/consul/consul-server.hcl"
+      - "-advertise=127.0.0.1"
+    
+    # ============ HEALTH CHECK ============
+    healthcheck:
+      test:
+        - "CMD"
+        - "consul"
+        - "version"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+# ============ DATA VOLUMES ============
+volumes:
+  vault_data:
+    driver: local
+  consul_data:
+    driver: local
+
+# ============ NETWORKS ============
+networks:
+  microservices-network:
+    external: true
