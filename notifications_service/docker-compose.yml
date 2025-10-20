@@ -1,7 +1,6 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database for notifications
   notification_db:
     image: postgres:16-alpine
     container_name: notification_db
@@ -12,7 +11,7 @@ services:
       POSTGRES_DB: notification_db
       POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C"
     ports:
-      - "5434:5432"  # Different port to avoid conflict with other DBs
+      - "5434:5432"  
     volumes:
       - notification_db_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -23,8 +22,6 @@ services:
       retries: 5
     networks:
       - notification-network
-
-  # Notification Service (Python FastAPI)
   notification_service:
     build:
       context: .
@@ -34,26 +31,19 @@ services:
     ports:
       - "8083:8083"
     environment:
-      # Database configuration
       DB_HOST: notification_db
       DB_PORT: 5432
       DB_USER: notifuser
       DB_PASSWORD: notifpass
       DB_NAME: notification_db
-      
-      # SMTP configuration (update with your credentials)
       SMTP_HOST: smtp.gmail.com
       SMTP_PORT: 587
       SMTP_USER: maisara.sherif.ms@gmail.com
-      SMTP_PASSWORD: xxxxxxxxxxxx
-      
-      # Service configuration
+      SMTP_PASSWORD: xxxxxxxxxxxxxxxx
       FROM_EMAIL: maisara.sherif.ms@gmail.com
       FROM_NAME: Food Order System
       SERVICE_PORT: 8083
       LOG_LEVEL: info
-      
-      # Other microservices (Docker internal network)
       ORDER_SERVICE_URL: http://order_service:8081
       PAYMENT_SERVICE_URL: http://payment_service:8082
     
@@ -63,7 +53,15 @@ services:
     
     networks:
       - notification-network
-      - microservices-network  # Connect to other services
+      - microservices-network  
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.notification_svc.rule=PathPrefix(`/api/v1/notification_svc`)"
+      - "traefik.http.routers.notification_svc.entrypoints=web,websecure"
+      - "traefik.http.routers.notification_svc.priority=100"
+      - "traefik.http.services.notification_svc.loadbalancer.server.port=8083"
+      - "traefik.http.middlewares.notification_stripprefix.stripprefix.prefixes=/api/v1/notification_svc"
+      - "traefik.http.routers.notification_svc.middlewares=notification_stripprefix"
     
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8083/health')"]
@@ -80,4 +78,4 @@ networks:
   notification-network:
     driver: bridge
   microservices-network:
-    external: true  # Shared network with order and payment services
+    external: true  

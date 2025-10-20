@@ -41,12 +41,21 @@ services:
       SERVICE_PORT: 8081
       LOG_LEVEL: info
       PAYMENT_SERVICE_URL: http://payment_service:8082
+      NOTIFICATION_SERVICE_URL: http://notification_service:8083
     depends_on:
       postgres_orders:
         condition: service_healthy
     networks:
       - order_network
       - microservices-network  
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.order_svc.rule=PathPrefix(`/api/v1/order_svc`)"
+      - "traefik.http.routers.order_svc.entrypoints=web,websecure"
+      - "traefik.http.routers.order_svc.priority=100"
+      - "traefik.http.services.order_svc.loadbalancer.server.port=8081"
+      - "traefik.http.middlewares.order_stripprefix.stripprefix.prefixes=/api/v1/order_svc"
+      - "traefik.http.routers.order_svc.middlewares=order_stripprefix"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
       interval: 30s

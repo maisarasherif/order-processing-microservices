@@ -1,0 +1,55 @@
+http:
+  middlewares:
+    corsHeaders:
+      headers:
+        accessControlAllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        accessControlAllowHeaders:
+          - Content-Type
+          - Authorization
+        accessControlAllowOriginList:
+          - "*"
+        accessControlMaxAge: 1728000
+
+    securityHeaders:
+      headers:
+        frameDeny: true
+        sslRedirect: true
+        sslHost: "localhost"
+        sslForceHost: false
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+
+    rateLimit:
+      rateLimit:
+        average: 100
+        period: "1m"
+
+    compress:
+      compress: {}
+
+    circuitbreaker:
+      circuitBreaker:
+        expression: "NetworkErrorRatio() > 0.5"
+
+  routers:
+    gateway:
+      rule: "Host(`localhost`) || Host(`127.0.0.1`)"
+      entryPoints:
+        - web
+        - websecure
+      service: gateway
+      middlewares:
+        - corsHeaders
+        - compress
+
+  services:
+    gateway:
+      loadBalancer:
+        servers:
+          - url: "http://frontend:80"

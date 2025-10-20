@@ -1,0 +1,52 @@
+global:
+  checkNewVersion: true
+  sendAnonymousUsage: false
+
+# API & Dashboard
+api:
+  insecure: true
+  dashboard: true
+  debug: true
+
+# Entrypoints (ports)
+entryPoints:
+  web:
+    address: ":80"
+  
+  websecure:
+    address: ":443"
+
+  ping:
+    address: ":8081"
+
+# Certificate resolver (optional, for HTTPS)
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: "admin@foodorder.com"
+      storage: acme.json
+      httpChallenge:
+        entryPoint: web
+
+# Providers
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: microservices-network
+    watch: true
+  
+  file:
+    filename: /dynamic_conf.yml
+    watch: true
+
+# Logging
+log:
+  level: INFO
+
+accessLog:
+  format: json
+
+# Ping endpoint for health checks
+ping:
+  entryPoint: ping

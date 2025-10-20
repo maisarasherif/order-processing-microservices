@@ -1,7 +1,6 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
     container_name: payment_db
@@ -12,7 +11,7 @@ services:
       POSTGRES_DB: payment_db
       POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C"
     ports:
-      - "5432:5432"  # Expose to host for debugging only
+      - "5432:5432" 
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -24,7 +23,6 @@ services:
     networks:
       - payment-network
 
-  # Payment Service (GO)
   payment_service:
     build:
       context: .
@@ -48,6 +46,14 @@ services:
     networks:
       - payment-network
       - microservices-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.payment_svc.rule=PathPrefix(`/api/v1/payment_svc`)"
+      - "traefik.http.routers.payment_svc.entrypoints=web,websecure"
+      - "traefik.http.routers.payment_svc.priority=100"
+      - "traefik.http.services.payment_svc.loadbalancer.server.port=8082"
+      - "traefik.http.middlewares.payment_stripprefix.stripprefix.prefixes=/api/v1/payment_svc"
+      - "traefik.http.routers.payment_svc.middlewares=payment_stripprefix"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8082/health"]
       interval: 30s
