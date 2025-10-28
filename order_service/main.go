@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,6 +10,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/maisarasherif/order-processing-microservices/order_service/config"
 	"github.com/maisarasherif/order-processing-microservices/order_service/handlers"
+	"github.com/maisarasherif/order-processing-microservices/order_service/logger"
 	"github.com/maisarasherif/order-processing-microservices/order_service/notifications"
 	"github.com/maisarasherif/order-processing-microservices/order_service/payment"
 	"github.com/maisarasherif/order-processing-microservices/order_service/repository"
@@ -18,7 +18,7 @@ import (
 
 func main() {
 
-	l := log.New(os.Stdout, "order-service: ", log.LstdFlags)
+	l := logger.NewLogger("order-service")
 
 	l.Println("Loading configuration...")
 	cfg, err := config.Load()

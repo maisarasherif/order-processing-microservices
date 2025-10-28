@@ -4,24 +4,24 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
 	"github.com/maisarasherif/order-processing-microservices/order_service/data"
+	"github.com/maisarasherif/order-processing-microservices/order_service/logger"
 	"github.com/maisarasherif/order-processing-microservices/order_service/notifications"
 	"github.com/maisarasherif/order-processing-microservices/order_service/payment"
 	"github.com/maisarasherif/order-processing-microservices/order_service/repository"
 )
 
 type Orders struct {
-	l                  *log.Logger
+	l                  *logger.StructuredLogger
 	repo               repository.OrderRepository
 	paymentClient      *payment.Client
 	notificationClient *notifications.Client
 }
 
-func NewOrdersHandler(l *log.Logger, repo repository.OrderRepository, paymentClient *payment.Client, notificationClient *notifications.Client) *Orders {
+func NewOrdersHandler(l *logger.StructuredLogger, repo repository.OrderRepository, paymentClient *payment.Client, notificationClient *notifications.Client) *Orders {
 	return &Orders{
 		l:                  l,
 		repo:               repo,
