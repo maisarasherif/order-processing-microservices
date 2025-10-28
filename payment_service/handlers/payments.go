@@ -3,20 +3,20 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
 	"github.com/maisarasherif/order-processing-microservices/payment_service/data"
+	"github.com/maisarasherif/order-processing-microservices/payment_service/logger"
 	"github.com/maisarasherif/order-processing-microservices/payment_service/repository"
 )
 
 type Payments struct {
-	l    *log.Logger
+	l    *logger.StructuredLogger
 	repo repository.PaymentRepository
 }
 
-func NewPaymentsWithRepository(l *log.Logger, repo repository.PaymentRepository) *Payments {
+func NewPaymentsWithRepository(l *logger.StructuredLogger, repo repository.PaymentRepository) *Payments {
 	return &Payments{
 		l:    l,
 		repo: repo,

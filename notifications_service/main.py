@@ -7,6 +7,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict, Any
+import logging
+import json
 from datetime import datetime
 import os
 import requests
@@ -49,6 +51,23 @@ class NotificationResponse(BaseModel):
     """Standard success response"""
     data: Dict[str, Any]
 
+
+class JSONFormatter(logging.Formatter):
+    def format(self, record):
+        log_obj = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "service_name": "notification-service",
+            "level": record.levelname,
+            "message": record.getMessage(),
+            "trace_id": getattr(record, 'trace_id', None)  # For tracing later
+        }
+        return json.dumps(log_obj)
+
+handler = logging.StreamHandler()
+handler.setFormatter(JSONFormatter())
+logger = logging.getLogger()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 # ============ HELPER FUNCTIONS ============
 

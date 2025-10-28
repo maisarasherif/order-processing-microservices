@@ -65,15 +65,16 @@ func main() {
 		})
 	})
 
-	//sm.HandleFunc("/products", oh.GetProducts).Methods(http.MethodGet)
-	//sm.HandleFunc("/products/{id}", oh.GetProduct).Methods(http.MethodGet)
+	sm.Use(handlers.MetricsMiddleware)
+
+	sm.Handle("/metrics", handlers.MetricsHandler()).Methods(http.MethodGet)
 
 	getRouter := sm.Methods(http.MethodGet).Subrouter()
 	getRouter.HandleFunc("/orders", oh.GetOrders)
 	getRouter.HandleFunc("/orders/{id}", oh.GetOrder)
 	getRouter.HandleFunc("/orders/customer/{id}", oh.GetCustomerOrders)
-	getRouter.HandleFunc("/products", oh.GetProducts)     // ADD
-	getRouter.HandleFunc("/products/{id}", oh.GetProduct) // ADD
+	getRouter.HandleFunc("/products", oh.GetProducts)
+	getRouter.HandleFunc("/products/{id}", oh.GetProduct)
 
 	postRouter := sm.Methods(http.MethodPost).Subrouter()
 	postRouter.HandleFunc("/orders", oh.CreateOrder)

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,12 +10,13 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/maisarasherif/order-processing-microservices/payment_service/config"
 	"github.com/maisarasherif/order-processing-microservices/payment_service/handlers"
+	"github.com/maisarasherif/order-processing-microservices/payment_service/logger"
 	"github.com/maisarasherif/order-processing-microservices/payment_service/repository"
 )
 
 func main() {
 
-	l := log.New(os.Stdout, "payment-service: ", log.LstdFlags)
+	l := logger.NewLogger("payment-service")
 
 	l.Println("Loading configuration...")
 	cfg, err := config.Load()
