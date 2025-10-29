@@ -42,6 +42,8 @@ func main() {
 		w.Write([]byte(`{"status":"healthy","service":"payment-service","database":"connected"}`))
 	}).Methods(http.MethodGet)
 
+	sm.Handle("/metrics", handlers.MetricsHandler()).Methods(http.MethodGet)
+
 	sm.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -54,6 +56,8 @@ func main() {
 			next.ServeHTTP(w, r)
 		})
 	})
+
+	sm.Use(handlers.MetricsMiddleware)
 
 	sm.HandleFunc("/payments/stats", ph.GetStatistics).Methods(http.MethodGet)
 

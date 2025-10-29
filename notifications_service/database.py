@@ -8,6 +8,9 @@ from psycopg2.extras import RealDictCursor
 from datetime import datetime
 import os
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Database:
@@ -32,9 +35,9 @@ class Database:
         """Establish connection to PostgreSQL database"""
         try:
             self.conn = psycopg2.connect(self.connection_string)
-            print("✓ Database connection established")
+            logger.info("✓ Database connection established")
         except Exception as e:
-            print(f"❌ Failed to connect to database: {e}")
+            logger.error(f"❌ Failed to connect to database: {e}")
             raise
     
     def create_notification(self, notification_data: dict) -> dict:
@@ -91,7 +94,7 @@ class Database:
         except Exception as e:
             # Rollback on error (like tx.Rollback() in Go)
             self.conn.rollback()
-            print(f"[ERROR] Failed to create notification: {e}")
+            logger.error(f"[ERROR] Failed to create notification: {e}")
             raise
     
     def update_notification_status(self, notification_id: str, status: str, 
@@ -118,7 +121,7 @@ class Database:
             cursor.close()
         except Exception as e:
             self.conn.rollback()
-            print(f"[ERROR] Failed to update notification status: {e}")
+            logger.error(f"[ERROR] Failed to update notification status: {e}")
             raise
     
     def get_notifications_by_order(self, order_id: str) -> list:
@@ -148,14 +151,14 @@ class Database:
             return [dict(row) for row in results]
             
         except Exception as e:
-            print(f"[ERROR] Failed to get notifications: {e}")
+            logger.error(f"[ERROR] Failed to get notifications: {e}")
             raise
     
     def close(self):
         """Close database connection"""
         if self.conn:
             self.conn.close()
-            print("✓ Database connection closed")
+            logger.info("✓ Database connection closed")
 
 
 # Global database instance (similar to dependency injection in Go)

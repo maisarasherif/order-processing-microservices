@@ -6,12 +6,15 @@ Fetches order and payment data, then sends a single receipt email.
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+from starlette.responses import Response
 from typing import Optional, Dict, Any
 import logging
 import json
 from datetime import datetime
 import os
 import requests
+import sys
 from dotenv import load_dotenv
 
 # Import our custom modules
@@ -55,19 +58,53 @@ class NotificationResponse(BaseModel):
 class JSONFormatter(logging.Formatter):
     def format(self, record):
         log_obj = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.utcnow().isoformat() + "Z",
             "service_name": "notification-service",
             "level": record.levelname,
             "message": record.getMessage(),
-            "trace_id": getattr(record, 'trace_id', None)  # For tracing later
+            "env": os.getenv("ENVIRONMENT", "development"),
+            "host": os.uname().nodename if hasattr(os, 'uname') else "unknown",
+            "pid": os.getpid(),
+            "trace_id": getattr(record, 'trace_id', None)
         }
         return json.dumps(log_obj)
 
-handler = logging.StreamHandler()
-handler.setFormatter(JSONFormatter())
+# Get root logger
 logger = logging.getLogger()
-logger.addHandler(handler)
 logger.setLevel(logging.INFO)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+
+# Remove all existing handlers
+for handler in logger.handlers[:]:
+    logger.removeHandler(handler)
+
+# Create new handler with JSON formatter
+handler = logging.StreamHandler(sys.stdout)
+handler.setFormatter(JSONFormatter())
+logger.addHandler(handler)
+
+# Configure uvicorn loggers to use our handler
+logging.getLogger("uvicorn").handlers = [handler]
+logging.getLogger("uvicorn.access").handlers = [handler]
+logging.getLogger("uvicorn.error").handlers = [handler]
+
+# ============ Metrics ============
+
+request_count = Counter(
+    'http_requests_total', 
+    'Total HTTP requests',
+    ['method', 'endpoint', 'status']
+)
+
+receipts_sent_total = Counter(
+    'receipts_sent_total',
+    'Total receipts sent'
+)
+
+receipts_failed_total = Counter(
+    'receipts_failed_total',
+    'Total failed receipts'
+)
 
 # ============ HELPER FUNCTIONS ============
 
@@ -112,6 +149,9 @@ async def health_check():
         "database": "connected"
     }
 
+@app.get("/metrics")
+async def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 @app.post("/send-receipt", response_model=NotificationResponse)
 async def send_receipt(request: SendReceiptRequest):
@@ -124,13 +164,14 @@ async def send_receipt(request: SendReceiptRequest):
     3. Sends receipt email with all information
     4. Logs notification to database
     """
-    print(f"📧 Sending receipt for order {request.order_id} to {request.customer_email}")
+    logger.info(f"Sending receipt for order {request.order_id} to {request.customer_email}")
     
     try:
         # 1. Fetch order details
         order_data = fetch_order_details(request.order_id)
         
         if not order_data:
+            logger.error(f"Failed to fetch order: {e}")
             raise HTTPException(status_code=404, detail="Order not found")
         
         # 2. Fetch payment details (if payment_id exists)
@@ -140,7 +181,7 @@ async def send_receipt(request: SendReceiptRequest):
                 payment_data = fetch_payment_details(order_data['payment_id'])
             except HTTPException:
                 # Payment details not critical, continue without them
-                print(f"[WARNING] Could not fetch payment details")
+                logger.warning("Could not fetch payment details")
         
         # 3. Create notification record in database
         notification_record = {
@@ -181,14 +222,14 @@ async def send_receipt(request: SendReceiptRequest):
                 status='failed',
                 error_message='Email send failed'
             )
-            
+
             raise HTTPException(status_code=500, detail="Failed to send email")
     
     except HTTPException:
         raise
     
     except Exception as e:
-        print(f"[ERROR] Failed to send receipt: {e}")
+        logger.error(f"[ERROR] Failed to send receipt: {e}")
         raise HTTPException(status_code=500, detail="Failed to send email")
 
 
@@ -205,7 +246,7 @@ async def get_order_notifications(order_id: str):
         })
     
     except Exception as e:
-        print(f"[ERROR] Failed to get notifications: {e}")
+        logger.error(f"[ERROR] Failed to get notifications: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve notifications")
 
 
@@ -214,27 +255,27 @@ async def get_order_notifications(order_id: str):
 @app.on_event("startup")
 async def startup_event():
     """Service startup"""
-    print("===========================================")
-    print("📧 Notification Service Starting...")
-    print("===========================================")
-    print(f"Port: {os.getenv('SERVICE_PORT', '8083')}")
-    print(f"Database: {os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}")
-    print(f"Order Service: {ORDER_SERVICE_URL}")
-    print(f"Payment Service: {PAYMENT_SERVICE_URL}")
-    print("-------------------------------------------")
-    print("ENDPOINTS:")
-    print("  Health:       GET  /health")
-    print("  Send Receipt: POST /send-receipt")
-    print("  Get Logs:     GET  /notifications/order/{order_id}")
-    print("===========================================")
+    logger.info("===========================================")
+    logger.info("📧 Notification Service Starting...")
+    logger.info("===========================================")
+    logger.info(f"Port: {os.getenv('SERVICE_PORT', '8083')}")
+    logger.info(f"Database: {os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}")
+    logger.info(f"Order Service: {ORDER_SERVICE_URL}")
+    logger.info(f"Payment Service: {PAYMENT_SERVICE_URL}")
+    logger.info("-------------------------------------------")
+    logger.info("ENDPOINTS:")
+    logger.info("  Health:       GET  /health")
+    logger.info("  Send Receipt: POST /send-receipt")
+    logger.info("  Get Logs:     GET  /notifications/order/{order_id}")
+    logger.info("===========================================")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Service shutdown"""
-    print("Shutting down notification service...")
+    logger.info("Shutting down notification service...")
     db.close()
-    print("✓ Notification Service shutdown complete")
+    logger.info("✓ Notification Service shutdown complete")
 
 
 # ============ RUN SERVER ============

@@ -9,6 +9,9 @@ from email.mime.multipart import MIMEMultipart
 from jinja2 import Environment, FileSystemLoader
 import os
 from typing import Optional, Dict, Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class EmailSender:
@@ -56,7 +59,7 @@ class EmailSender:
             return self._send_email(to_email, subject, html_content)
             
         except Exception as e:
-            print(f"[ERROR] Failed to send receipt: {e}")
+            logger.error(f"[ERROR] Failed to send receipt: {e}")
             return False
     
     def _send_email(self, to_email: str, subject: str, html_content: str) -> bool:
@@ -78,11 +81,11 @@ class EmailSender:
                 server.login(self.smtp_user, self.smtp_password)
                 server.send_message(message)
             
-            print(f"✓ Email sent to {to_email}: {subject}")
+            logger.info(f"✓ Email sent to {to_email}: {subject}")
             return True
             
         except Exception as e:
-            print(f"[ERROR] SMTP error: {e}")
+            logger.error(f"[ERROR] SMTP error: {e}")
             return False
 
 
