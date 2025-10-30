@@ -31,6 +31,12 @@ services:
     restart: unless-stopped
     ports:
       - "8082:8082"
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: localhost:24225
+        tag: payment-service
+        fluentd-async: "true"
     environment:
       DB_HOST: postgres
       DB_PORT: 5432

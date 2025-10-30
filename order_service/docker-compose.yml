@@ -31,6 +31,12 @@ services:
     restart: unless-stopped
     ports:
       - "8081:8081"
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: localhost:24224
+        tag: order-service
+        fluentd-async: "true"
     environment:
       DB_HOST: postgres_orders
       DB_PORT: 5432

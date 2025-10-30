@@ -30,6 +30,12 @@ services:
     restart: unless-stopped
     ports:
       - "8083:8083"
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: localhost:24226
+        tag: notification-service
+        fluentd-async: "true"
     environment:
       DB_HOST: notification_db
       DB_PORT: 5432

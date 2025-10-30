@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  # Fluent Bit Log Aggregator
+  fluent-bit:
+    image: fluent/fluent-bit:2.2
+    container_name: fluent-bit
+    restart: unless-stopped
+    ports:
+      - "24224:24224"  # Order Service
+      - "24225:24225"  # Payment Service
+      - "24226:24226"  # Notification Service
+    volumes:
+      - ./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - ./parsers.conf:/fluent-bit/etc/parsers.conf:ro
+    depends_on:
+      - elasticsearch
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:2020/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Elasticsearch
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms256m -Xmx512m"  # Reduced heap: min 256MB, max 512MB
+      - bootstrap.memory_lock=false
+      - cluster.routing.allocation.disk.threshold_enabled=true
+      - cluster.routing.allocation.disk.watermark.low=85%
+      - cluster.routing.allocation.disk.watermark.high=90%
+      - indices.memory.index_buffer_size=10%
+      - http.max_content_length=50mb
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - microservices-network
+    # Hard resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 1G      # Maximum 1GB RAM
+          cpus: '1.0'     # Maximum 1 CPU core
+        reservations:
+          memory: 512M    # Reserve 512MB minimum
+          cpus: '0.5'     # Reserve 0.5 CPU cores
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Kibana
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: kibana
+    restart: unless-stopped
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_MAXPAYLOADBYTES=1048576  # 1MB max payload
+      - LOGGING_QUIET=true              # Reduce Kibana's own logging
+      - NODE_OPTIONS=--max-old-space-size=768  # Set Node.js heap to 768MB
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - microservices-network
+    # Resource limits for Kibana (increased from 512MB)
+    deploy:
+      resources:
+        limits:
+          memory: 1G      # Increased to 1GB
+          cpus: '1.0'     # Increased to 1 CPU core
+        reservations:
+          memory: 512M    # Reserve 512MB minimum
+          cpus: '0.5'     # Reserve 0.5 CPU cores
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  elasticsearch_data:
+    driver: local
+
+networks:
+  microservices-network:
+    external: true
